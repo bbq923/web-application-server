@@ -17,7 +17,9 @@ import org.slf4j.LoggerFactory;
 import db.DataBase;
 import model.User;
 import util.HttpRequestUtils;
-import util.RequestLineUtils;
+import util.HttpRequestUtils.Pair;
+import util.IOUtils;
+import util.Splitter;
 
 public class RequestHandler extends Thread {
     private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
@@ -42,28 +44,31 @@ public class RequestHandler extends Thread {
         		return;
         	}
         	
-        	String path = requestLine.split(" ")[1];
+        	String path = Splitter.getPath(requestLine);
         	log.debug("path : {}", path);
-        	boolean isStyleSheet = path.substring(path.length() - 3).equals("css"); //path로 부터 요청한 파일이 css 인지 여부를 저장하는 플래그 변수
         	
+        	int contentLength = 0;
         	String line = br.readLine();
         	while (!line.equals("")) {
         		log.debug("header : {}", line);
         		line = br.readLine();
+        		if (line.startsWith("Content-Length")) {
+        			contentLength = Integer.parseInt(line.split(":")[1].trim());
+        		}
         	}
+        	
+        	
         	
         	DataOutputStream dos = new DataOutputStream(out);
         	if (path.startsWith("/user/create")) {
-        		String queryString = RequestLineUtils.getQueryString(path);
-        		User newUser = makeUserByQueryString(queryString);
+        		String requestBody = IOUtils.readData(br, contentLength);
+        		User newUser = makeUserByQueryString(requestBody);
         		log.debug("new user : {}", newUser);
         		DataBase.addUser(newUser);
         		byte[] body = Files.readAllBytes(new File("./webapp" + "/user/list.html").toPath());
         		response200Header(dos, body.length, "/user/list.html");
         		responseBody(dos, body);        		
         	} else {
-        		// TODO 사용자 요청에 대한 처리는 이 곳에 구현하면 된다.
-//            byte[] body = "Hello World".getBytes();
         		byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
         		response200Header(dos, body.length, path);
         		responseBody(dos, body);
@@ -74,9 +79,7 @@ public class RequestHandler extends Thread {
         }
     }
     
-    private String getFileExtension(String path) {
-    	return path.substring(path.lastIndexOf(".") + 1);
-    }
+    
     
     private User makeUserByQueryString(String queryString) {
     	Map<String, String> qsParsed = HttpRequestUtils.parseQueryString(queryString);
@@ -88,7 +91,7 @@ public class RequestHandler extends Thread {
         try {
             dos.writeBytes("HTTP/1.1 200 OK \r\n");
             dos.writeBytes("Content-Type: text/" 
-            		+ getFileExtension(path)
+            		+ Splitter.getFileExtension(path) // TODO .js file to text/javascript
             		+ ";charset=utf-8\r\n");
             dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
             dos.writeBytes("\r\n");
