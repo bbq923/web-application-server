@@ -65,9 +65,10 @@ public class RequestHandler extends Thread {
         		User newUser = makeUserByQueryString(requestBody);
         		log.debug("new user : {}", newUser);
         		DataBase.addUser(newUser);
-        		byte[] body = Files.readAllBytes(new File("./webapp" + "/user/list.html").toPath());
-        		response200Header(dos, body.length, "/user/list.html");
-        		responseBody(dos, body);        		
+//        		byte[] body = Files.readAllBytes(new File("./webapp" + "/user/list.html").toPath());
+//        		response200Header(dos, body.length, "/user/list.html");
+//        		responseBody(dos, body);        		
+        		response302Header(dos, "/index.html");
         	} else {
         		byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
         		response200Header(dos, body.length, path);
@@ -98,6 +99,16 @@ public class RequestHandler extends Thread {
         } catch (IOException e) {
             log.error(e.getMessage());
         }
+    }
+    
+    private void response302Header(DataOutputStream dos, String location) {
+    	try {
+    		dos.writeBytes("HTTP/1.1 302 Found \r\n");
+    		dos.writeBytes("Location: http://localhost:8080" + location);
+    		dos.writeBytes("\r\n");
+    	} catch (IOException e) {
+    		log.error(e.getMessage());
+    	}
     }
 
     private void responseBody(DataOutputStream dos, byte[] body) {
