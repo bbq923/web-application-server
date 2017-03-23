@@ -17,8 +17,8 @@ import org.slf4j.LoggerFactory;
 import db.DataBase;
 import model.User;
 import util.HttpRequestUtils;
-import util.HttpRequestUtils.Pair;
 import util.IOUtils;
+import util.SetCookies;
 import util.Splitter;
 
 public class RequestHandler extends Thread {
@@ -52,28 +52,35 @@ public class RequestHandler extends Thread {
         	while (!line.equals("")) {
         		log.debug("header : {}", line);
         		line = br.readLine();
-        		if (line.startsWith("Content-Length")) {
+        		if (line.startsWith("Content-Length")) { // Content-Length 값을 구한다.
         			contentLength = Integer.parseInt(line.split(":")[1].trim());
         		}
         	}
         	
-        	
-        	
         	DataOutputStream dos = new DataOutputStream(out);
-        	if (path.startsWith("/user/create")) {
+        	if (path.equals("/user/create")) { // make signUp response
         		String requestBody = IOUtils.readData(br, contentLength);
         		User newUser = makeUserByQueryString(requestBody);
         		log.debug("new user : {}", newUser);
         		DataBase.addUser(newUser);
-//        		byte[] body = Files.readAllBytes(new File("./webapp" + "/user/list.html").toPath());
-//        		response200Header(dos, body.length, "/user/list.html");
-//        		responseBody(dos, body);        		
         		response302Header(dos, "/index.html");
-        	} else {
-        		byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
-        		response200Header(dos, body.length, path);
-        		responseBody(dos, body);
-        	}
+        	} else if (path.equals("/user/login")) { // make login response page
+        		String requestBody = IOUtils.readData(br,  contentLength);
+        		log.debug("login body: {}", requestBody);
+        		Map<String, String> tryLogin = HttpRequestUtils.parseQueryString(requestBody);
+        		if (DataBase.findUserById(tryLogin.get("userId")).getPassword().equals(tryLogin.get("password"))) { // TODO userId 가 없을 때 처리 필요
+        			SetCookies.setLoginCookie("logined=true");
+        			response302Header(dos, "/index.html");
+        		} else {
+        			SetCookies.setLoginCookie("logined=false");
+        			response302Header(dos, "/user/login_failed.html");
+        		}
+			} else {
+				log.debug("현재 쿠키 값 : {}", SetCookies.getLoginCookie());
+				byte[] body = Files.readAllBytes(new File("./webapp" + path).toPath());
+				response200Header(dos, body.length, path);
+				responseBody(dos, body);
+			}
         	
         } catch (IOException e) {
             log.error(e.getMessage());
@@ -94,6 +101,9 @@ public class RequestHandler extends Thread {
             dos.writeBytes("Content-Type: text/" 
             		+ Splitter.getFileExtension(path) // TODO .js file to text/javascript
             		+ ";charset=utf-8\r\n");
+            if (!SetCookies.getLoginCookie().equals("")) {
+            	dos.writeBytes("Set-Cookie: " + SetCookies.getLoginCookie() + "\r\n");
+            }
             dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
             dos.writeBytes("\r\n");
         } catch (IOException e) {
@@ -104,7 +114,7 @@ public class RequestHandler extends Thread {
     private void response302Header(DataOutputStream dos, String location) {
     	try {
     		dos.writeBytes("HTTP/1.1 302 Found \r\n");
-    		dos.writeBytes("Location: http://localhost:8080" + location);
+    		dos.writeBytes("Location: http://localhost:8080" + location + "\r\n");
     		dos.writeBytes("\r\n");
     	} catch (IOException e) {
     		log.error(e.getMessage());
